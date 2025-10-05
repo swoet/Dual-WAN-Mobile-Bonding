@@ -38,16 +38,17 @@ object BondingClient {
             socket.connect(InetSocketAddress(host, port), 5000)
             val out = BufferedOutputStream(socket.getOutputStream())
             val `in` = BufferedInputStream(socket.getInputStream())
-            val line = "CONNECT example.com 443\n".toByteArray()
-            out.write(line)
+            val req = "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n".toByteArray()
+            out.write(req)
             out.flush()
-            // After this, server pipes bytes; we try to start TLS to example.com
+            // Consume HTTP/1.1 200 Connection Established
+            val resp = ByteArray(1024)
+            val n = `in`.read(resp)
+            if (n <= 0 || !String(resp, 0, n).contains("200")) return false
             val sslFactory = if (insecure) insecureTrustAllFactory() else SSLSocketFactory.getDefault() as SSLSocketFactory
             val ssl = sslFactory.createSocket(socket, "example.com", 443, true)
             ssl.soTimeout = 5000
-            // Send TLS ClientHello implicitly by starting handshake
             (ssl as javax.net.ssl.SSLSocket).startHandshake()
-            // If handshake succeeds, return true
             ssl.close()
             return true
         } catch (e: Exception) {
