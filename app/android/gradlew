@@ -1,0 +1,20 @@
+# Generated gradlew (Unix shell)
+# Minimal wrapper script that invokes the Gradle Wrapper if present
+
+APP_BASE_DIR=$(dirname "$0")
+WRAPPER_JAR="$APP_BASE_DIR/gradle/wrapper/gradle-wrapper.jar"
+
+if [ ! -f "$WRAPPER_JAR" ]; then
+  echo "Gradle wrapper JAR not found at $WRAPPER_JAR"
+  echo "Please run: powershell -ExecutionPolicy Bypass -File ../../scripts/setup_gradle_wrapper.ps1"
+  exit 1
+fi
+
+JAVA_HOME_BIN="${JAVA_HOME}/bin/java"
+if [ -x "$JAVA_HOME_BIN" ]; then
+  JAVA_EXE="$JAVA_HOME_BIN"
+else
+  JAVA_EXE="java"
+fi
+
+exec "$JAVA_EXE" -jar "$WRAPPER_JAR" "$@"

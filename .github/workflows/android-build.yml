@@ -8,7 +8,8 @@ on:
 
 jobs:
   build:
-    if: ${{ hashFiles('app/android/gradlew') != '' }}
+    # Gate CI until Android project is CI-ready
+    if: ${{ hashFiles('app/android/.ci_ready') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
