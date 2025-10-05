@@ -11,7 +11,10 @@ Key features:
 
 Project status:
 - Milestone M0: PRD and repository scaffold.
-- Next: M1 Android VPN skeleton + UI.
+- Milestone M1: Android VPN skeleton + UI committed.
+- Milestone M2: Network selection and RTT monitoring committed.
+- Milestone M3: Helper-bias scheduler (range-based test download) committed.
+- Next: M4+ server integration paths and bonding mode (optional), tests, and release artifacts.
 
 Repository structure:
 - docs/: PRD, architecture, privacy policy, and checklists
