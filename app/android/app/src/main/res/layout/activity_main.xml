@@ -82,4 +82,11 @@
         android:text="Stop VPN"
         android:layout_marginTop="8dp" />
 
+    <Button
+        android:id="@+id/test_download"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Run 10 MiB Test Download (85/15)"
+        android:layout_marginTop="16dp" />
+
 </LinearLayout>

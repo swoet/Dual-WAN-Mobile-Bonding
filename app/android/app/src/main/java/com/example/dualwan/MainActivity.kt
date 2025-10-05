@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
 
         startButton.setOnClickListener { prepareAndStartVpn() }
         stopButton.setOnClickListener { stopVpnService() }
+        findViewById<Button>(R.id.test_download).setOnClickListener { startTestDownload() }
 
         maybeRequestNotificationPermission()
 
@@ -90,6 +91,31 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, VpnTunnelService::class.java)
         ContextCompat.startForegroundService(this, intent)
         statusText.text = "VPN started"
+    }
+
+    private fun startTestDownload() {
+        val nets = NetworkBinder.getAvailableNetworks(this)
+        val mainNet = nets.firstOrNull { it.transport == vm.selection.value.main }?.network
+        val helperNet = nets.firstOrNull { it.transport == vm.selection.value.helper }?.network
+        val url = "https://speed.hetzner.de/100MB.bin"
+        val sched = DownloadScheduler(this)
+        sched.downloadUrl(
+            url,
+            mainNet,
+            helperNet,
+            vm.stats.value.helperFraction,
+            totalBytes = 10L shl 20,
+            onProgress = { res ->
+                runOnUiThread {
+                    statusText.text = "Main: ${'$'}{res.mainBytes/1024/1024} MiB, Helper: ${'$'}{res.helperBytes/1024/1024} MiB"
+                }
+            },
+            onDone = { res ->
+                runOnUiThread {
+                    statusText.text = "Done — Main: ${'$'}{res.mainBytes/1024/1024} MiB, Helper: ${'$'}{res.helperBytes/1024/1024} MiB"
+                }
+            }
+        )
     }
 
     private fun stopVpnService() {

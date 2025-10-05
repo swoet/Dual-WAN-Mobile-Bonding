@@ -42,6 +42,7 @@ class MainViewModel(private val context: Context) {
 
     fun startMonitoring() {
         scope.launch {
+            var lastMain = -1L
             while (isActive) {
                 val nets = NetworkBinder.getAvailableNetworks(context)
                 val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -49,10 +50,25 @@ class MainViewModel(private val context: Context) {
                 val helperNet = nets.firstOrNull { it.transport == _selection.value.helper }?.network
                 val mainRtt = mainNet?.let { measureRtt(cm, it) } ?: -1
                 val helperRtt = helperNet?.let { measureRtt(cm, it) } ?: -1
-                _stats.value = _stats.value.copy(mainRttMs = mainRtt, helperRttMs = helperRtt)
+                val updated = adjustHelperFraction(_stats.value.helperFraction, mainRtt, helperRtt, lastMain)
+                _stats.value = _stats.value.copy(mainRttMs = mainRtt, helperRttMs = helperRtt, helperFraction = updated)
+                lastMain = mainRtt
                 delay(2000)
             }
         }
+    }
+
+    private fun adjustHelperFraction(current: Int, mainRtt: Long, helperRtt: Long, lastMain: Long): Int {
+        var hf = current
+        if (mainRtt > 0 && lastMain > 0) {
+            val spike = mainRtt - lastMain
+            if (spike > 200) hf = minOf(50, hf + 10)
+        }
+        if (mainRtt in 1..150) {
+            // decay towards 15
+            if (hf > 15) hf = maxOf(15, hf - 5)
+        }
+        return hf
     }
 
     private fun measureRtt(cm: ConnectivityManager, net: Network): Long {
