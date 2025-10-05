@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="VPN stopped"
+        android:textSize="18sp"
+        android:paddingBottom="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <Button
+            android:id="@+id/select_main_wifi"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Main: Wi‑Fi" />
+        <View android:layout_width="8dp" android:layout_height="1dp" />
+        <Button
+            android:id="@+id/select_main_cell"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Main: Cell" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp">
+        <Button
+            android:id="@+id/select_helper_wifi"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Helper: Wi‑Fi" />
+        <View android:layout_width="8dp" android:layout_height="1dp" />
+        <Button
+            android:id="@+id/select_helper_cell"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Helper: Cell" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/main_rtt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Main RTT: -"
+        android:layout_marginTop="12dp" />
+
+    <TextView
+        android:id="@+id/helper_rtt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Helper RTT: -"
+        android:layout_marginTop="4dp" />
+
+    <Button
+        android:id="@+id/start_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start VPN"
+        android:layout_marginTop="16dp" />
+
+    <Button
+        android:id="@+id/stop_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Stop VPN"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/test_download"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Run 10 MiB Test Download (85/15)"
+        android:layout_marginTop="16dp" />
+
+</LinearLayout>

@@ -1,0 +1,30 @@
+name: android-build
+
+on:
+  push:
+    branches: [ dev, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    # Gate CI until Android project is CI-ready
+    if: ${{ hashFiles('app/android/.ci_ready') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Prepare Gradle wrapper jar
+        run: bash scripts/setup_gradle_wrapper.sh
+      - name: Grant execute permission for gradlew
+        run: chmod +x app/android/gradlew
+      - name: Build
+        working-directory: app/android
+        run: ./gradlew build
+      - name: Assemble Debug
+        working-directory: app/android
+        run: ./gradlew assembleDebug

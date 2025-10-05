@@ -1,0 +1,36 @@
+# General
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Android / Gradle
+.gradle/
+**/build/
+**/out/
+local.properties
+.cxx/
+*.keystore
+*.jks
+captures/
+app/android/.gradle/
+app/android/local.properties
+app/android/**/build/
+
+# Go build artifacts
+server/bonding-server
+server/*.exe
+server/**/bin/
+server/**/dist/
+
+# Coverage / test / reports
+coverage/
+reports/
+**/test-results/
+
+# Node (if any tooling gets added later)
+node_modules/
