@@ -59,6 +59,9 @@ class MainActivity : AppCompatActivity() {
         startButton.setOnClickListener { prepareAndStartVpn() }
         stopButton.setOnClickListener { stopVpnService() }
         findViewById<Button>(R.id.test_download).setOnClickListener { startTestDownload() }
+        findViewById<Button>(R.id.open_settings).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
 
         maybeRequestNotificationPermission()
 
