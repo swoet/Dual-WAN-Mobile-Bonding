@@ -18,6 +18,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
+    private lateinit var mainRttText: TextView
+    private lateinit var helperRttText: TextView
+
+    private val vm by lazy { MainViewModel(this) }
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -36,11 +40,41 @@ class MainActivity : AppCompatActivity() {
         statusText = findViewById(R.id.status_text)
         startButton = findViewById(R.id.start_button)
         stopButton = findViewById(R.id.stop_button)
+        mainRttText = findViewById(R.id.main_rtt)
+        helperRttText = findViewById(R.id.helper_rtt)
+
+        findViewById<Button>(R.id.select_main_wifi).setOnClickListener {
+            vm.setSelection(NetworkBinder.Transport.WIFI, vm.selection.value.helper)
+        }
+        findViewById<Button>(R.id.select_main_cell).setOnClickListener {
+            vm.setSelection(NetworkBinder.Transport.CELLULAR, vm.selection.value.helper)
+        }
+        findViewById<Button>(R.id.select_helper_wifi).setOnClickListener {
+            vm.setSelection(vm.selection.value.main, NetworkBinder.Transport.WIFI)
+        }
+        findViewById<Button>(R.id.select_helper_cell).setOnClickListener {
+            vm.setSelection(vm.selection.value.main, NetworkBinder.Transport.CELLULAR)
+        }
 
         startButton.setOnClickListener { prepareAndStartVpn() }
         stopButton.setOnClickListener { stopVpnService() }
 
         maybeRequestNotificationPermission()
+
+        // Start RTT monitoring
+        vm.startMonitoring()
+        lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {})
+        // Update UI with a simple polling (avoid full LiveData setup for M1/M2)
+        val handler = android.os.Handler(mainLooper)
+        val runnable = object : Runnable {
+            override fun run() {
+                val s = vm.stats.value
+                mainRttText.text = "Main RTT: ${'$'}{if (s.mainRttMs>=0) s.mainRttMs else "-"} ms"
+                helperRttText.text = "Helper RTT: ${'$'}{if (s.helperRttMs>=0) s.helperRttMs else "-"} ms"
+                handler.postDelayed(this, 2000)
+            }
+        }
+        handler.post(runnable)
     }
 
     private fun prepareAndStartVpn() {
