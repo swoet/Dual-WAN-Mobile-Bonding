@@ -62,6 +62,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.open_settings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        findViewById<Button>(R.id.select_apps).setOnClickListener {
+            startActivity(Intent(this, AppSelectionActivity::class.java))
+        }
 
         maybeRequestNotificationPermission()
 

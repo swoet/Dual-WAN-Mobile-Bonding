@@ -22,6 +22,9 @@ class VpnTunnelService : VpnService() {
         super.onCreate()
         createNotificationChannel()
         startForeground(1, buildNotification("Dual-WAN VPN is running"))
+        
+        // Start network quality monitoring for intelligent routing
+        NetworkQualityMonitor.startMonitoring(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -33,10 +36,14 @@ class VpnTunnelService : VpnService() {
     }
 
     private suspend fun startVpnLoop() {
+        val settingsManager = SettingsManager(this)
         val builder = Builder()
             .addAddress("10.0.0.2", 24)
             .addRoute("0.0.0.0", 0)
             .setSession("DualWanVpn")
+        
+        // Apply per-app filtering
+        applyAppFiltering(builder, settingsManager)
         tunInterface = builder.establish()
         val pfd = tunInterface ?: return
         val input = FileInputStream(pfd.fileDescriptor).channel
@@ -74,6 +81,39 @@ class VpnTunnelService : VpnService() {
         input.close()
         output.close()
     }
+    
+    private fun applyAppFiltering(builder: Builder, settingsManager: SettingsManager) {
+        val selectedApps = settingsManager.getSelectedApps()
+        val vpnMode = settingsManager.vpnMode
+        
+        when (vpnMode) {
+            "include" -> {
+                // Only selected apps use VPN
+                if (selectedApps.isEmpty()) {
+                    // If no apps selected in include mode, add this app to prevent lockout
+                    builder.addAllowedApplication(packageName)
+                } else {
+                    selectedApps.forEach { packageName ->
+                        try {
+                            builder.addAllowedApplication(packageName)
+                        } catch (e: PackageManager.NameNotFoundException) {
+                            android.util.Log.w("VpnTunnelService", "App not found: $packageName")
+                        }
+                    }
+                }
+            }
+            "exclude" -> {
+                // All apps except selected ones use VPN
+                selectedApps.forEach { packageName ->
+                    try {
+                        builder.addDisallowedApplication(packageName)
+                    } catch (e: PackageManager.NameNotFoundException) {
+                        android.util.Log.w("VpnTunnelService", "App not found: $packageName")
+                    }
+                }
+            }
+        }
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -99,6 +139,10 @@ class VpnTunnelService : VpnService() {
     override fun onDestroy() {
         vpnJob?.cancel()
         tunInterface?.close()
+        
+        // Stop network quality monitoring
+        NetworkQualityMonitor.stopMonitoring()
+        
         super.onDestroy()
     }
 }

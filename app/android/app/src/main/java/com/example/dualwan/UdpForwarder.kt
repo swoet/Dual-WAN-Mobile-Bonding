@@ -126,27 +126,29 @@ object UdpForwarder {
     }
     
     private fun selectNetworkForConnection(context: Context, dstAddr: String, dstPort: Int): Network {
-        val networks = NetworkBinder.getAvailableNetworks(context)
-        
-        // Simple multi-path strategy:
-        // - DNS (port 53) -> prefer fastest/primary network
-        // - QUIC/other -> load balance or use helper network for redundancy
+        // Use NetworkQualityMonitor for intelligent selection
         return when {
             dstPort == 53 -> {
-                // DNS: use primary (fastest) network for low latency
-                networks.find { it.transport == NetworkBinder.Transport.WIFI } ?.network
-                    ?: networks.firstOrNull()?.network
+                // DNS: use fastest available network for low latency
+                NetworkQualityMonitor.getBestNetwork(context)
+                    ?: NetworkQualityMonitor.getBestNetwork(context, NetworkBinder.Transport.WIFI)
                     ?: getDefaultNetwork(context)
             }
             dstPort == 443 || dstPort in 80..8080 -> {
-                // QUIC/HTTP: round-robin between networks for load balancing
-                val index = (dstAddr.hashCode() + dstPort) % networks.size
-                networks.getOrNull(index)?.network ?: getDefaultNetwork(context)
+                // QUIC/HTTPS: use quality-based round-robin
+                val qualities = NetworkQualityMonitor.getCurrentQualities(context)
+                    .filter { it.isAvailable && it.score > 10f } // Only good networks
+                if (qualities.isNotEmpty()) {
+                    val index = (dstAddr.hashCode() + dstPort) % qualities.size
+                    qualities[index].network
+                } else {
+                    getDefaultNetwork(context)
+                }
             }
             else -> {
-                // Other UDP: prefer cellular for mobility, WiFi as fallback
-                networks.find { it.transport == NetworkBinder.Transport.CELLULAR }?.network
-                    ?: networks.firstOrNull()?.network
+                // Other UDP: prefer best available network with cellular preference
+                NetworkQualityMonitor.getBestNetwork(context, NetworkBinder.Transport.CELLULAR)
+                    ?: NetworkQualityMonitor.getBestNetwork(context)
                     ?: getDefaultNetwork(context)
             }
         }
