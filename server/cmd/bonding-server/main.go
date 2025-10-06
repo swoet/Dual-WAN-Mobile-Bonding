@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+
+	framing "github.com/swoet/Dual-WAN-Mobile-Bonding/server/pkg/framing"
 )
 
 func main() {
@@ -19,6 +21,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); _, _ = w.Write([]byte("ok")) })
 	mux.HandleFunc("/fetch", handleFetch)
+	mux.HandleFunc("/tunnel", handleTunnel)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodConnect {
 			handleHTTPConnect(w, r)
@@ -66,6 +69,29 @@ func handleFetch(w http.ResponseWriter, r *http.Request) {
 	for k, vv := range resp.Header { for _, v := range vv { w.Header().Add(k, v) } }
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+}
+
+// handleTunnel upgrades to a raw binary stream for framed subflows.
+// Client should send: GET /tunnel?link=main|helper&id=... with headers Connection: Upgrade and Upgrade: dwnb
+func handleTunnel(w http.ResponseWriter, r *http.Request) {
+	link := r.URL.Query().Get("link")
+	if link == "" { http.Error(w, "missing link", http.StatusBadRequest); return }
+	hj, ok := w.(http.Hijacker)
+	if !ok { http.Error(w, "hijacking not supported", http.StatusInternalServerError); return }
+	conn, buf, err := hj.Hijack()
+	if err != nil { return }
+	// Send 101 Switching Protocols
+	_, _ = buf.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: dwnb\r\nConnection: Upgrade\r\n\r\n")
+	_ = buf.Flush()
+	// Read frames and discard for now (scaffold)
+	go func() {
+		defer conn.Close()
+		for {
+			f, err := framing.Decode(conn)
+			if err != nil { return }
+			_ = f // TODO: route to reassembly per streamID
+		}
+	}()
 }
 
 func getenv(k, def string) string { if v := os.Getenv(k); v != "" { return v }; return def }
