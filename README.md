@@ -14,7 +14,8 @@ Project status:
 - Milestone M1: Android VPN skeleton + UI committed.
 - Milestone M2: Network selection and RTT monitoring committed.
 - Milestone M3: Helper-bias scheduler (range-based test download) committed.
-- Next: M4+ server integration paths and bonding mode (optional), tests, and release artifacts.
+- In progress (dev ahead of main): Path A UDP DNS forwarder scaffolding; Path B tunnel scaffolding.
+- PR-first workflow: dev changes land via PR into main. Main stays stable.
 
 Repository structure:
 - docs/: PRD, architecture, privacy policy, and checklists
