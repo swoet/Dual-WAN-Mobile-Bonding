@@ -1,0 +1,2 @@
+# This file enables Android CI builds in GitHub Actions
+# The android-build.yml workflow checks for its existence via hashFiles()
