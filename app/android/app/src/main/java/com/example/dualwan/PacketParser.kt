@@ -2,8 +2,10 @@ package com.example.dualwan
 
 import java.nio.ByteBuffer
 
-// Minimal IPv4 header parsing for unit tests
+// Minimal IPv4 + UDP header parsing for unit tests and VPN loop scaffolding
 object PacketParser {
+    const val PROTO_UDP = 17
+
     data class IPv4Header(
         val version: Int,
         val ihl: Int,
@@ -13,24 +15,28 @@ object PacketParser {
         val dst: String
     )
 
+    data class UdpHeader(
+        val srcPort: Int,
+        val dstPort: Int,
+        val length: Int
+    )
+
     fun parse(buf: ByteBuffer): IPv4Header {
-        buf.mark()
-        val b0 = buf.get().toInt() and 0xFF
+        val dup = buf.duplicate()
+        val b0 = (dup.get().toInt() and 0xFF)
         val version = b0 shr 4
         val ihl = b0 and 0x0F
-        val dscpEcn = buf.get()
-        val totalLength = buf.short.toInt() and 0xFFFF
-        val identification = buf.short
-        val flagsFrag = buf.short
-        val ttl = buf.get()
-        val protocol = buf.get().toInt() and 0xFF
-        val headerChecksum = buf.short
+        dup.get() // dscp/ecn
+        val totalLength = dup.short.toInt() and 0xFFFF
+        dup.short // identification
+        dup.short // flags+frag
+        dup.get() // ttl
+        val protocol = dup.get().toInt() and 0xFF
+        dup.short // checksum
         val srcBytes = ByteArray(4)
-        buf.get(srcBytes)
+        dup.get(srcBytes)
         val dstBytes = ByteArray(4)
-        buf.get(dstBytes)
-        // restore for higher-level processing if needed
-        buf.reset()
+        dup.get(dstBytes)
         return IPv4Header(
             version = version,
             ihl = ihl,
@@ -39,5 +45,16 @@ object PacketParser {
             src = srcBytes.joinToString(".") { (it.toInt() and 0xFF).toString() },
             dst = dstBytes.joinToString(".") { (it.toInt() and 0xFF).toString() }
         )
+    }
+
+    fun parseUdp(buf: ByteBuffer, ip: IPv4Header? = null): UdpHeader {
+        val ipHdr = ip ?: parse(buf)
+        val dup = buf.duplicate()
+        dup.position(ipHdr.ihl * 4)
+        val srcPort = dup.short.toInt() and 0xFFFF
+        val dstPort = dup.short.toInt() and 0xFFFF
+        val length = dup.short.toInt() and 0xFFFF
+        // checksum next (ignored here)
+        return UdpHeader(srcPort, dstPort, length)
     }
 }
