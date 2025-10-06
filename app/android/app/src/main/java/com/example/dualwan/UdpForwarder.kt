@@ -7,7 +7,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -15,238 +14,70 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.random.Random
 
-// UdpForwarder: NAT-enabled UDP forwarder for all UDP traffic (DNS, QUIC, etc.)
-// Implements session tracking, multi-network scheduling, and proper NAT translation
+// UdpForwarder: minimal DNS forwarder (UDP/53) wired into VPN loop.
+// This is a basic step for Path A; it forwards a single DNS query and writes the response back to TUN.
 object UdpForwarder {
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     @Volatile private var tunWriter: FileChannel? = null
-    
-    // NAT session tracking
-    data class NatSession(
-        val clientAddr: String,
-        val clientPort: Int,
-        val serverAddr: String,
-        val serverPort: Int,
-        val localPort: Int,
-        val network: Network,
-        val socket: DatagramSocket,
-        var lastActivity: Long = System.currentTimeMillis()
-    )
-    
-    private val natTable = ConcurrentHashMap<String, NatSession>()
-    private var localPortCounter = 10000 + Random.nextInt(20000)
 
     fun setTunWriter(writer: FileChannel?) {
         tunWriter = writer
     }
 
     fun handlePacket(context: Context, buf: ByteBuffer, ip: PacketParser.IPv4Header) {
-        scope.launch { handleUdpPacket(context, buf, ip) }
-    }
-    
-    private suspend fun handleUdpPacket(context: Context, buf: ByteBuffer, ip: PacketParser.IPv4Header) {
         try {
             val udp = PacketParser.parseUdp(buf, ip)
+            // Only handle DNS for now
+            if (udp.dstPort != 53 && udp.srcPort != 53) return
             val ipHeaderLen = ip.ihl * 4
             val udpHeaderLen = 8
             val payloadLen = ip.totalLength - ipHeaderLen - udpHeaderLen
             if (payloadLen <= 0) return
-            
             val dup = buf.duplicate()
             dup.position(ipHeaderLen + udpHeaderLen)
             val payload = ByteArray(payloadLen)
             dup.get(payload)
-            
-            // Create session key for NAT tracking
-            val sessionKey = "${ip.src}:${udp.srcPort}->${ip.dst}:${udp.dstPort}"
-            
-            // Check if this is a new outbound connection or existing session response
-            val existingSession = natTable[sessionKey]
-            if (existingSession != null) {
-                // This is a response from server - forward back to client
-                forwardResponse(existingSession, payload)
-                existingSession.lastActivity = System.currentTimeMillis()
-            } else {
-                // New outbound connection - create NAT session
-                createNewSession(context, sessionKey, ip, udp, payload)
-            }
-            
-        } catch (e: Exception) {
-            // Log and ignore malformed packets for robustness
-            android.util.Log.w("UdpForwarder", "Error handling UDP packet: ${e.message}")
-        }
-    }
-    
-    private suspend fun createNewSession(
-        context: Context,
-        sessionKey: String,
-        ip: PacketParser.IPv4Header,
-        udp: PacketParser.UdpHeader,
-        payload: ByteArray
-    ) {
-        try {
-            // Select network for this connection using multi-path logic
-            val network = selectNetworkForConnection(context, ip.dst, udp.dstPort)
-            
-            // Create socket bound to selected network
-            val socket = DatagramSocket()
-            network.bindSocket(socket)
-            socket.soTimeout = 30000 // 30 second timeout for UDP sessions
-            
-            // Allocate local port for NAT
-            val localPort = getNextLocalPort()
-            
-            // Create NAT session
-            val session = NatSession(
-                clientAddr = ip.src,
-                clientPort = udp.srcPort,
-                serverAddr = ip.dst,
-                serverPort = udp.dstPort,
-                localPort = localPort,
-                network = network,
-                socket = socket
-            )
-            
-            natTable[sessionKey] = session
-            
-            // Send outbound packet
-            val dstAddr = InetAddress.getByName(ip.dst)
-            val packet = DatagramPacket(payload, payload.size, InetSocketAddress(dstAddr, udp.dstPort))
-            socket.send(packet)
-            
-            // Start listening for responses in background
-            scope.launch { listenForResponses(session, sessionKey) }
-            
-        } catch (e: Exception) {
-            android.util.Log.w("UdpForwarder", "Failed to create NAT session: ${e.message}")
-        }
-    }
-    
-    private fun selectNetworkForConnection(context: Context, dstAddr: String, dstPort: Int): Network {
-        // Use NetworkQualityMonitor for intelligent selection
-        return when {
-            dstPort == 53 -> {
-                // DNS: use fastest available network for low latency
-                NetworkQualityMonitor.getBestNetwork(context)
-                    ?: NetworkQualityMonitor.getBestNetwork(context, NetworkBinder.Transport.WIFI)
-                    ?: getDefaultNetwork(context)
-            }
-            dstPort == 443 || dstPort in 80..8080 -> {
-                // QUIC/HTTPS: use quality-based round-robin
-                val qualities = NetworkQualityMonitor.getCurrentQualities(context)
-                    .filter { it.isAvailable && it.score > 10f } // Only good networks
-                if (qualities.isNotEmpty()) {
-                    val index = (dstAddr.hashCode() + dstPort) % qualities.size
-                    qualities[index].network
-                } else {
-                    getDefaultNetwork(context)
-                }
-            }
-            else -> {
-                // Other UDP: prefer best available network with cellular preference
-                NetworkQualityMonitor.getBestNetwork(context, NetworkBinder.Transport.CELLULAR)
-                    ?: NetworkQualityMonitor.getBestNetwork(context)
-                    ?: getDefaultNetwork(context)
-            }
-        }
-    }
-    
-    private fun getDefaultNetwork(context: Context): Network {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        return cm.activeNetwork ?: throw RuntimeException("No active network available")
-    }
-    
-    private fun getNextLocalPort(): Int {
-        synchronized(this) {
-            localPortCounter++
-            if (localPortCounter > 65535) localPortCounter = 10000
-            return localPortCounter
-        }
-    }
-    
-    private suspend fun listenForResponses(session: NatSession, sessionKey: String) {
-        try {
-            val buffer = ByteArray(1500) // Standard MTU size
-            val packet = DatagramPacket(buffer, buffer.size)
-            
-            while (true) {
+
+            scope.launch {
                 try {
-                    session.socket.receive(packet)
-                    val responseData = packet.data.copyOfRange(0, packet.length)
-                    
-                    // Forward response back to client via TUN
-                    forwardResponseToClient(session, responseData)
-                    
-                    // Update session activity
-                    session.lastActivity = System.currentTimeMillis()
-                    
-                } catch (e: java.net.SocketTimeoutException) {
-                    // Session timeout - clean up
-                    break
-                } catch (e: Exception) {
-                    android.util.Log.w("UdpForwarder", "Error receiving UDP response: ${e.message}")
-                    break
+                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                    val active = cm.activeNetwork
+                    val socket = DatagramSocket()
+                    if (active != null) {
+                        // Bind UDP socket to active network if available
+                        active.bindSocket(socket)
+                    }
+                    socket.soTimeout = 3000
+                    val dstAddr = InetAddress.getByName(ip.dst)
+                    val req = DatagramPacket(payload, payload.size, InetSocketAddress(dstAddr, udp.dstPort))
+                    socket.send(req)
+                    val respBuf = ByteArray(1500)
+                    val respPkt = DatagramPacket(respBuf, respBuf.size)
+                    socket.receive(respPkt)
+                    val resp = respPkt.data.copyOfRange(0, respPkt.length)
+                    socket.close()
+
+                    // Build IPv4 + UDP reply back to TUN
+                    val srcIP = ip.dst
+                    val dstIP = ip.src
+                    val srcPort = udp.dstPort
+                    val dstPort = udp.srcPort
+
+                    val ipHeader = buildIPv4Header(srcIP, dstIP, 20 + 8 + resp.size, 17)
+                    val udpHeader = buildUdpHeader(srcPort, dstPort, 8 + resp.size)
+                    val packet = ByteBuffer.allocate(ipHeader.size + udpHeader.size + resp.size)
+                    packet.put(ipHeader)
+                    packet.put(udpHeader)
+                    packet.put(resp)
+                    packet.flip()
+                    tunWriter?.write(packet)
+                } catch (_: Exception) {
+                    // Drop on error for now
                 }
             }
-        } finally {
-            // Clean up session
-            cleanupSession(sessionKey)
-        }
-    }
-    
-    private fun forwardResponse(session: NatSession, payload: ByteArray) {
-        forwardResponseToClient(session, payload)
-    }
-    
-    private fun forwardResponseToClient(session: NatSession, responseData: ByteArray) {
-        try {
-            // Build IPv4 + UDP reply packet back to TUN interface
-            val srcIP = session.serverAddr
-            val dstIP = session.clientAddr
-            val srcPort = session.serverPort
-            val dstPort = session.clientPort
-            
-            val ipHeader = buildIPv4Header(srcIP, dstIP, 20 + 8 + responseData.size, 17)
-            val udpHeader = buildUdpHeader(srcPort, dstPort, 8 + responseData.size)
-            val packet = ByteBuffer.allocate(ipHeader.size + udpHeader.size + responseData.size)
-            packet.put(ipHeader)
-            packet.put(udpHeader)
-            packet.put(responseData)
-            packet.flip()
-            
-            tunWriter?.write(packet)
-            
-        } catch (e: Exception) {
-            android.util.Log.w("UdpForwarder", "Failed to forward response to client: ${e.message}")
-        }
-    }
-    
-    private fun cleanupSession(sessionKey: String) {
-        natTable.remove(sessionKey)?.let { session ->
-            try {
-                session.socket.close()
-            } catch (e: Exception) {
-                android.util.Log.w("UdpForwarder", "Error closing session socket: ${e.message}")
-            }
-        }
-    }
-    
-    // Periodic cleanup of expired sessions
-    init {
-        scope.launch {
-            while (true) {
-                delay(30000) // Check every 30 seconds
-                val now = System.currentTimeMillis()
-                val expiredSessions = natTable.entries.filter {
-                    now - it.value.lastActivity > 300000 // 5 minutes timeout
-                }
-                expiredSessions.forEach { 
-                    cleanupSession(it.key)
-                }
-            }
+        } catch (_: Exception) {
+            // ignore malformed UDP for now
         }
     }
 
