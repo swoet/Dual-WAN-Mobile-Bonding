@@ -89,7 +89,7 @@ func handleTunnel(w http.ResponseWriter, r *http.Request) {
 		for {
 			f, err := framing.Decode(conn)
 			if err != nil { return }
-			_ = f // TODO: route to reassembly per streamID
+			log.Printf("tunnel(%s): stream=%d seq=%d len=%d", link, f.StreamID, f.Seq, len(f.Payload))
 		}
 	}()
 }

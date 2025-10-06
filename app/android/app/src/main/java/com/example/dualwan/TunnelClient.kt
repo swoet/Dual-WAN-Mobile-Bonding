@@ -42,7 +42,9 @@ class TunnelClient(private val context: Context) {
                 if (!resp.contains("101")) throw RuntimeException("Upgrade failed: ${'$'}resp")
                 onReady()
                 // From here, socket is raw binary stream for TunnelFrame encode/decode
-                // TODO: send/receive frames
+                // Send a test frame
+                val hello = TunnelFrame(streamId = 1, seq = 0, payload = "hello".toByteArray()).encode()
+                out.write(hello); out.flush()
             } catch (e: Exception) {
                 onError(e)
             }

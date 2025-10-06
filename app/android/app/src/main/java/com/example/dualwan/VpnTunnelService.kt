@@ -12,6 +12,7 @@ import kotlinx.coroutines.*
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 
 class VpnTunnelService : VpnService() {
     private var vpnJob: Job? = null
@@ -40,6 +41,7 @@ class VpnTunnelService : VpnService() {
         val pfd = tunInterface ?: return
         val input = FileInputStream(pfd.fileDescriptor).channel
         val output = FileOutputStream(pfd.fileDescriptor).channel
+        UdpForwarder.setTunWriter(output)
         val packetBuf = ByteBuffer.allocate(32767)
 
         while (isActive) {
