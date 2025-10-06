@@ -42,6 +42,7 @@ class VpnTunnelService : VpnService() {
         val input = FileInputStream(pfd.fileDescriptor).channel
         val output = FileOutputStream(pfd.fileDescriptor).channel
         UdpForwarder.setTunWriter(output)
+        TcpForwarder.setTunWriter(output)
         val packetBuf = ByteBuffer.allocate(32767)
 
         while (isActive) {
@@ -51,11 +52,17 @@ class VpnTunnelService : VpnService() {
                 packetBuf.flip()
                 try {
                     val ip = PacketParser.parse(packetBuf)
-                    if (ip.protocol == PacketParser.PROTO_UDP) {
-                        UdpForwarder.handlePacket(applicationContext, packetBuf, ip)
-                    } else {
-                        // For now, submit non-UDP packets to placeholder scheduler
-                        FlowScheduler.submit(ip)
+                    when (ip.protocol) {
+                        PacketParser.PROTO_UDP -> {
+                            UdpForwarder.handlePacket(applicationContext, packetBuf, ip)
+                        }
+                        PacketParser.PROTO_TCP -> {
+                            TcpForwarder.handlePacket(applicationContext, packetBuf, ip)
+                        }
+                        else -> {
+                            // For other protocols, submit to placeholder scheduler
+                            FlowScheduler.submit(ip)
+                        }
                     }
                 } catch (e: Exception) {
                     // ignore malformed packets in M1/M2 scaffolding
