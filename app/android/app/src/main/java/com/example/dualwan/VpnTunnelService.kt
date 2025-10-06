@@ -47,13 +47,16 @@ class VpnTunnelService : VpnService() {
             val read = input.read(packetBuf)
             if (read > 0) {
                 packetBuf.flip()
-                // Minimal parsing stub
                 try {
-                    val flow = PacketParser.parse(packetBuf)
-                    // For M1, we do not forward; just drop or echo
-                    FlowScheduler.submit(flow)
+                    val ip = PacketParser.parse(packetBuf)
+                    if (ip.protocol == PacketParser.PROTO_UDP) {
+                        UdpForwarder.handlePacket(applicationContext, packetBuf, ip)
+                    } else {
+                        // For now, submit non-UDP packets to placeholder scheduler
+                        FlowScheduler.submit(ip)
+                    }
                 } catch (e: Exception) {
-                    // ignore malformed packets in M1
+                    // ignore malformed packets in M1/M2 scaffolding
                 }
             } else {
                 delay(10)
